@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="it">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gioco della Spia</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      margin: 0;
+      padding: 1rem;
+      max-width: 500px;
+      margin: auto;
+      background-color: #f5f5f5;
+    }
+
+    h1,
+    h2,
+    h3 {
+      text-align: center;
+    }
+
+    input,
+    button {
+      width: 100%;
+      padding: 0.8rem;
+      margin-top: 0.5rem;
+      font-size: 1rem;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+    }
+
+    button {
+      background-color: #4CAF50;
+      color: white;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background-color: #45a049;
+    }
+
+    .section {
+      display: none;
+    }
+
+    .visible {
+      display: block;
+    }
+
+    ul {
+      padding-left: 1.2rem;
+    }
+
+    @media (max-width: 400px) {
+
+      input,
+      button {
+        font-size: 0.95rem;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <h1>Gioco della Spia</h1>
+
+  <!-- INIZIO -->
+  <div id="startSection" class="section visible">
+    <input id="nickname" placeholder="Nickname" />
+    <input id="room" placeholder="Stanza" />
+    <input id="numSpies" type="number" min="1" max="5" value="1" />
+    <label for="numSpies">Numero di spie</label>
+    <button id="joinBtn">Entra</button>
+  </div>
+
+  <!-- STANZA -->
+  <div id="roomSection" class="section">
+    <h2>Stanza: <span id="roomTitle"></span></h2>
+    <h3>Giocatori:</h3>
+    <ul id="playerList"></ul>
+    <button id="startGameBtn" style="display:none;">Inizia</button>
+  </div>
+
+  <!-- PARTITA -->
+  <div id="gameSection" class="section">
+    <h2 id="roleInfo"></h2>
+    <button id="replayBtn" style="display:none; margin-top: 2rem;">🔁 Rigioca</button>
+  </div>
+
+  <script>
+    const ws = new WebSocket('ws://localhost:3000');
+
+    let nickname = '';
+    let roomId = '';
+    let isOwner = false;
+
+    const showSection = (id) => {
+      document.querySelectorAll('.section').forEach(div => div.classList.remove('visible'));
+      document.getElementById(id).classList.add('visible');
+    };
+
+    document.getElementById('joinBtn').onclick = () => {
+      nickname = document.getElementById('nickname').value.trim();
+      roomId = document.getElementById('room').value.trim();
+      const numSpies = parseInt(document.getElementById('numSpies').value);
+
+      if (!nickname || !roomId) return alert("Inserisci nickname e stanza!");
+
+      isOwner = true;
+      ws.send(JSON.stringify({ action: 'join', nickname, roomId, spies: numSpies }));
+      document.getElementById('roomTitle').innerText = roomId;
+      showSection('roomSection');
+    };
+
+    document.getElementById('startGameBtn').onclick = () => {
+      ws.send(JSON.stringify({ action: 'start', roomId }));
+    };
+
+    document.getElementById('replayBtn').onclick = () => {
+      ws.send(JSON.stringify({ action: 'start', roomId }));
+      showSection('roomSection');
+    };
+
+    ws.onmessage = (event) => {
+      const msg = JSON.parse(event.data);
+
+      if (msg.action === 'playerList') {
+        const ul = document.getElementById('playerList');
+        ul.innerHTML = '';
+        msg.players.forEach(p => {
+          const li = document.createElement('li');
+          li.textContent = p;
+          ul.appendChild(li);
+        });
+
+        if (msg.players[0] === nickname) {
+          isOwner = true;
+          document.getElementById('startGameBtn').style.display = 'inline-block';
+        } else {
+          isOwner = false;
+          document.getElementById('startGameBtn').style.display = 'none';
+        }
+      }
+
+      if (msg.action === 'startGame') {
+        showSection('gameSection');
+      }
+
+
+      if (msg.action === 'role') {
+        const info = document.getElementById('roleInfo');
+        if (msg.role === 'spy') {
+          info.innerText = '🕵️ Sei una SPIA! Categoria: ' + msg.category + '. Prova a capirla senza farti scoprire!';
+        } else {
+          info.innerText = '📍 Parola: ' + msg.word + ' (Categoria: ' + msg.category + ')';
+        }
+
+        // Mostra "Rigioca" solo se sei owner
+        if (isOwner) {
+          document.getElementById('replayBtn').style.display = 'inline-block';
+        }
+      }
+    };
+
+    ws.onclose = () => alert('Connessione chiusa. Ricarica la pagina per rientrare.');
+  </script>
+</body>
+
+</html>
